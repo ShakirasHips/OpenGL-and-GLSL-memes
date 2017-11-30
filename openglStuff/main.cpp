@@ -2,6 +2,9 @@
 #include <string>
 #include <fstream>
 #include <glm.hpp>
+#include <gtc\matrix_transform.hpp>
+#include "ShapeData.h"
+#include "ShapeGen.h"
 
 #define log(x) std::cout << x << std::endl
 
@@ -62,13 +65,6 @@ std::string readShaderCode(const char* filename)
 
 }
 
-struct Vertex
-{
-	glm::vec3 pos;
-	glm::vec3 color;
-
-};
-
 const float xdel = 0.1f;
 int numTrig = 0;
 const int vertsTri = 3;
@@ -97,21 +93,24 @@ void sendAnotherTriToOpenGL()
 
 }
 
-void drawTrig()
+void sendDataToGL()
 {
-	Vertex tri[] =
-	{
-		glm::vec3(0.0f, 1.0f, 0.0f),
-		glm::vec3(1.0f, 0.0f, 0.0f),
+	ShapeData shape = ShapeGen::makeCube();
 
-		glm::vec3(-1.0f, -1.0f, 0.0f),
-		glm::vec3(0.0f, 1.0f, 0.0f),
+	GLuint vertexBufferID;
+	glGenBuffers(1, &vertexBufferID);
+	glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+	glBufferData(GL_ARRAY_BUFFER, shape.vertexBufferSize(), shape.verts, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, 0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (char*)(sizeof(float) * 3));
 
-		glm::vec3(1.0f, -1.0f, 0.0f),
-		glm::vec3(0.0f, 0.0f, 1.0f),
-	};
-
-	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(tri), tri);
+	GLuint indexArrayBufferID;
+	glGenBuffers(1, &indexArrayBufferID);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexArrayBufferID);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, shape.indexBufferSize(), shape.indices, GL_STATIC_DRAW);
+	shape.Cleanup();
 }
 
 
@@ -133,7 +132,7 @@ int main(int argc, char** argv)
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (char*)(sizeof(float) * 3));
 
 
-	GLushort ind[] = {0,1,2, 3, 4,5};
+	GLushort ind[] = {0,1,2};
 	GLuint indBufferID;
 	glGenBuffers(1, &indBufferID);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indBufferID);
@@ -169,9 +168,16 @@ int main(int argc, char** argv)
 
 	glUseProgram(programID);
 	
-	
-	drawTrig();
+	glm::mat4 projectionMatrix = glm::perspective(glm::radians(60.0f), 800.0f / 600.0f, 0.1f, 10.0f);
+	glm::mat4 translateMatrix = glm::translate(projectionMatrix, glm::vec3(0.0f, 0.0f, -3.0f));
+	glm::mat4 fullTransformMatrix = glm::rotate(translateMatrix, glm::radians(54.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
+
+	GLint fullTransformMatrixLocation = glGetUniformLocation(programID, "fullTransformMatrix");
+
+	glUniformMatrix4fv(fullTransformMatrixLocation, 1, GL_FALSE, &fullTransformMatrix[0][0]);
+	sendDataToGL();
+	float rot = 0.0f;
 	for (;;)
 	{
 		SDL_PollEvent(&e);
@@ -180,6 +186,12 @@ int main(int argc, char** argv)
 		{
 			break;
 		}
+
+
+		if (e.type == SDL_KEYDOWN)
+		{
+			rot++;
+		}
 		
 		glViewport(0, 0, window.getWidth(), window.getHeight());
 		window.updateWindowParams();
@@ -187,8 +199,9 @@ int main(int argc, char** argv)
 		glClear(GL_COLOR_BUFFER_BIT);
 		glClear(GL_DEPTH_BUFFER_BIT);
 		
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-		//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+		//glDrawArrays(GL_TRIANGLES, 0, 3);
+	
+		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0);
 
 		SDL_GL_SwapWindow(window.getWindow());
 	}
