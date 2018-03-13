@@ -5,9 +5,12 @@
 #include <gtc\matrix_transform.hpp>
 #include "ShapeData.h"
 #include "ShapeGen.h"
+#include "Camera.h"
 
 #define log(x) std::cout << x << std::endl
 
+Camera cam;
+int numIndicies;
 
 bool checkShaderCompilerStatus(GLuint shaderID)
 {
@@ -29,7 +32,6 @@ bool checkShaderCompilerStatus(GLuint shaderID)
 
 	return true;
 }
-
 
 bool checkProgramLinkStatus(GLuint shaderID)
 {
@@ -65,31 +67,39 @@ std::string readShaderCode(const char* filename)
 
 }
 
-const float xdel = 0.1f;
-int numTrig = 0;
-const int vertsTri = 3;
-const int numfloatsvert = 6;
-const int trianglebytesize = numfloatsvert*vertsTri * sizeof(float);
-
-
-
-void sendAnotherTriToOpenGL()
+void mouseMoveEvent(SDL_MouseMotionEvent* e)
 {
-	const GLfloat tri = -1 + numTrig * xdel;
+	cam.mouseUpdate(glm::vec2(e->x, e->y));
+}
 
-	GLfloat g[] = 
+void keyBoardStateChecker(const Uint8 *keyboardState)
+{
+	if (keyboardState[SDL_SCANCODE_W])
 	{
-		tri, 1.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
+		cam.moveForward();
+	}
+	else if (keyboardState[SDL_SCANCODE_S])
+	{
+		cam.moveBackward();
+	}
+	
+	if (keyboardState[SDL_SCANCODE_A])
+	{
+		cam.moveLeft();
+	}
+	else if (keyboardState[SDL_SCANCODE_D])
+	{
+		cam.moveRight();
+	}
 
-		tri+xdel, 1.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-
-		tri, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-	};
-	glBufferSubData(GL_ARRAY_BUFFER, numTrig*trianglebytesize, trianglebytesize, g);
-	numTrig++;
+	if (keyboardState[SDL_SCANCODE_F])
+	{
+		cam.moveDown();
+	}
+	else if (keyboardState[SDL_SCANCODE_R])
+	{
+		cam.moveUp();
+	}
 
 }
 
@@ -110,35 +120,38 @@ void sendDataToGL()
 	glGenBuffers(1, &indexArrayBufferID);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexArrayBufferID);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, shape.indexBufferSize(), shape.indices, GL_STATIC_DRAW);
+	numIndicies = shape.numIndicies;
 	shape.Cleanup();
+
+
+	GLuint transformationMatrixBufferID;
+	glGenBuffers(1, &transformationMatrixBufferID);
+	glBindBuffer(GL_ARRAY_BUFFER, transformationMatrixBufferID);
+
+
+	glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4)*2, 0, GL_DYNAMIC_DRAW);
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FLOAT, sizeof(glm::mat4), (void*)(sizeof(float) * 0));
+	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FLOAT, sizeof(glm::mat4), (void*)(sizeof(float) * 4));
+	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FLOAT, sizeof(glm::mat4), (void*)(sizeof(float) * 8));
+	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FLOAT, sizeof(glm::mat4), (void*)(sizeof(float) * 12));
+
+
+	glEnableVertexAttribArray(2);
+	glEnableVertexAttribArray(3);
+	glEnableVertexAttribArray(4);
+	glEnableVertexAttribArray(5);
+
+
+	glVertexAttribDivisor(2, 1);
+	glVertexAttribDivisor(3, 1);
+	glVertexAttribDivisor(4, 1);
+	glVertexAttribDivisor(5, 1);
+
+
 }
 
-
-int main(int argc, char** argv)
+void loadShaders()
 {
-	opglWindow window;
-	window.init();
-	SDL_Event e;
-
-	
-
-	GLuint vertBufferID;
-	glGenBuffers(1, &vertBufferID);
-	glBindBuffer(GL_ARRAY_BUFFER, vertBufferID);
-	glBufferData(GL_ARRAY_BUFFER, 10000, 0, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, 0);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (char*)(sizeof(float) * 3));
-
-
-	GLushort ind[] = {0,1,2};
-	GLuint indBufferID;
-	glGenBuffers(1, &indBufferID);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indBufferID);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(ind), ind, GL_STATIC_DRAW);
-
-
 	GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragShaderID = glCreateShader(GL_FRAGMENT_SHADER);
 
@@ -153,9 +166,9 @@ int main(int argc, char** argv)
 
 	glCompileShader(vertexShaderID);
 	glCompileShader(fragShaderID);
-	
+
 	if (!checkShaderCompilerStatus(vertexShaderID) || !checkShaderCompilerStatus(fragShaderID))
-		return 1;
+		return exit(2);
 
 
 	GLuint programID = glCreateProgram();
@@ -164,20 +177,20 @@ int main(int argc, char** argv)
 	glLinkProgram(programID);
 
 	if (!checkProgramLinkStatus(programID))
-		return 2;
+		return exit(2);
 
 	glUseProgram(programID);
-	
-	glm::mat4 projectionMatrix = glm::perspective(glm::radians(60.0f), 800.0f / 600.0f, 0.1f, 10.0f);
-	glm::mat4 translateMatrix = glm::translate(projectionMatrix, glm::vec3(0.0f, 0.0f, -3.0f));
-	glm::mat4 fullTransformMatrix = glm::rotate(translateMatrix, glm::radians(54.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+}
 
+int main(int argc, char** argv)
+{
+	opglWindow window;
+	window.init();
+	SDL_Event e;
 
-	GLint fullTransformMatrixLocation = glGetUniformLocation(programID, "fullTransformMatrix");
-
-	glUniformMatrix4fv(fullTransformMatrixLocation, 1, GL_FALSE, &fullTransformMatrix[0][0]);
+	loadShaders();
 	sendDataToGL();
-	float rot = 0.0f;
+
 	for (;;)
 	{
 		SDL_PollEvent(&e);
@@ -187,21 +200,31 @@ int main(int argc, char** argv)
 			break;
 		}
 
-
-		if (e.type == SDL_KEYDOWN)
+		if (e.type == SDL_MOUSEMOTION)
 		{
-			rot++;
+			mouseMoveEvent(&e.motion);
 		}
 		
+		keyBoardStateChecker(SDL_GetKeyboardState(0));
+
+		glm::mat4 projectionMatrix = glm::perspective(glm::radians(90.0f), (float)window.getWidth()/ window.getHeight(), 0.1f, 100.0f);
+		glm::mat4 fullTransforms[] =
+		{
+			glm::rotate(glm::translate(projectionMatrix * cam.getWorldToViewMatrix(), glm::vec3(0.0f, 0.0f, -3.0f)), glm::radians(54.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+			glm::rotate(glm::translate(projectionMatrix * cam.getWorldToViewMatrix(), glm::vec3(2.0f, 1.0f, -3.5f)), glm::radians(126.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+		};
+		glBufferData(GL_ARRAY_BUFFER, sizeof(fullTransforms), fullTransforms, GL_DYNAMIC_DRAW);
+
 		glViewport(0, 0, window.getWidth(), window.getHeight());
 		window.updateWindowParams();
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glClear(GL_DEPTH_BUFFER_BIT);
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 		
-		//glDrawArrays(GL_TRIANGLES, 0, 3);
-	
-		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0);
+		
+		glDrawElementsInstanced(GL_TRIANGLES, numIndicies, GL_UNSIGNED_SHORT, 0 , 2);
+		glDrawElementsInstanced(GL_TRIANGLES, 60, GL_UNSIGNED_SHORT, 0, 1);
 
 		SDL_GL_SwapWindow(window.getWindow());
 	}

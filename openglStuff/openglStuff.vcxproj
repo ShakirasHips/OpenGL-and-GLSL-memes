@@ -123,11 +123,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="opglWindow.cpp" />
     <ClCompile Include="ShapeGen.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera.h" />
     <ClInclude Include="opglWindow.h" />
     <ClInclude Include="ShapeData.h" />
     <ClInclude Include="ShapeGen.h" />
